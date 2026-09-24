@@ -20,7 +20,7 @@ public class NewUrlCrawler {
     private final CrawlService crawlService;
     private final UrlNormalizer urlNormalizer;
 
-    @Scheduled(cron = "0 * * * * *")
+    @Scheduled(cron = "0 */10 * * * *")
     public void fetchUrlsAndGetData(){
         List<PendingCrawl> crawlList = pendingCrawlRepo.getPendingUrls();
         System.out.println("CrawlList " + crawlList);
@@ -48,6 +48,7 @@ public class NewUrlCrawler {
 //        List<PendingCrawl> pendingCrawls = pendingCrawlRepo.findAll();
 //        System.out.println(pendingCrawls);
 //        for(PendingCrawl crawl: pendingCrawls){
+//            urlBloomFilterService.add(crawl.getUrl());
 //            System.out.println(crawl.getUrl() + " " + urlBloomFilterService.mightContain(crawl.getUrl()));
 //        }
 //    }

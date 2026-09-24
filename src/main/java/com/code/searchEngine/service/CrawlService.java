@@ -19,7 +19,11 @@ import org.springframework.stereotype.Service;
 import java.net.URI;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,7 +37,6 @@ public class CrawlService {
     private final DomainRepo domainRepo;
     private final LocalSSRFChecker localSSRFChecker;
     private final UrlNormalizer urlNormalizer;
-    private final int MAX_PAGES_PER_CRAWL = 200;
 
 
     public ArrayList<String> crawl(String url, int domainId) {
@@ -72,7 +75,8 @@ public class CrawlService {
                         newUrls.add(normalizedUrl);
                     }
                 }
-                return new ArrayList<>(newUrls.subList(0, Math.min(newUrls.size(), 500)));
+                int MAX_PAGES_PER_CRAWL = 200;
+                return new ArrayList<>(newUrls.subList(0, Math.min(newUrls.size(), MAX_PAGES_PER_CRAWL)));
             }
             return null;
         }catch (Exception e){
@@ -94,78 +98,96 @@ public class CrawlService {
     }
 
     @Transactional
-    public void crawlComplete(PendingCrawl completedCrawl, List<String> newUrls) {
-        Timestamp now = Timestamp.from(Instant.now());
-        pendingCrawlRepo.delete(completedCrawl);
-        crawlerRepo.save(
-                Crawled.builder()
-                        .url(completedCrawl.getUrl())
-                        .domainId(completedCrawl.getDomainId())
-                        .createdAt(now)
-                        .updatedAt(now)
-                        .build()
+    public void crawlComplete(PendingCrawl crawl, List<String> newUrls) {
+        // 1. normalize + dedupe (in-batch, then bloom filter)
+        Timestamp now = new Timestamp(System.currentTimeMillis());
+        List<String> fresh = newUrls.stream()
+                .map(urlNormalizer::normalize)
+                .filter(Objects::nonNull)
+                .distinct()
+                .filter(u -> !urlBloomFilterService.mightContain(u))
+                .toList();
 
-        );
-        if(newUrls==null){
+        // 2. group by host (skip malformed URLs)
+        Map<String, List<String>> byHost = fresh.stream()
+                .filter(u -> extractHost(u) != null)
+                .collect(Collectors.groupingBy(this::extractHost));
+
+        if (byHost.isEmpty()) {
+            pendingCrawlRepo.delete(crawl);
+            crawlerRepo.save(Crawled.builder()
+                    .url(crawl.getUrl()).domainId(crawl.getDomainId()).createdAt(now).updatedAt(now).build());
             return;
         }
-        List<String> filteredUrls = newUrls.stream()
-                .filter(url -> !urlBloomFilterService.mightContain(url))
-                .toList();
 
-        if (filteredUrls.isEmpty()) {
-            return;
-        }
-        Set<String> domainNames = filteredUrls.stream()
-                .map(this::getDomain)
-                .collect(Collectors.toSet());
-        System.out.println("DomainNames: " + domainNames);
-        List<Domain> domains = domainRepo.getDataInDomainName(
-                domainNames.stream().toList()
-        );
+        // 3. ONE query for all domains involved
+        Map<String, Domain> domainMap = domainRepo
+                .getDataInDomainName(new ArrayList<>(byHost.keySet()))
+                .stream()
+                .collect(Collectors.toMap(Domain::getDomainName, Function.identity()));
 
-        Set<String> existingDomainNames = domains.stream()
-                .map(Domain::getDomainName)
-                .collect(Collectors.toSet());
-        List<Domain> newDomains = domainNames.stream()
-                .filter(domainName -> !existingDomainNames.contains(domainName))
-                .map(domainName ->  Domain.builder().domainName(
-                        domainName
+        List<PendingCrawl> toSave = new ArrayList<>();
+        List<Domain> domainsToUpdate = new ArrayList<>();
 
-                ).nextAvailableAt(now).crawlDelayMs(500).createAt(now).updatedAt(now).build())
-                .toList();
-        List<Domain> savedNewDomains = domainRepo.saveAll(newDomains);
-        domains.addAll(savedNewDomains);
-        Map<String, Integer> domainIdMap = domains.stream()
-                .collect(Collectors.toMap(
-                        Domain::getDomainName,
-                        Domain::getId
-                ));
 
-        List<PendingCrawl> pendingCrawls = filteredUrls.stream()
-                .map(url ->  PendingCrawl.builder().url(url)
-                        .domainId(domainIdMap.get(getDomain(url)))
-                        .retryAfter(null)
-                        .attemptCount(0)
-                        .createdAt(now)
+        for (Map.Entry<String, List<String>> entry : byHost.entrySet()) {
+            Domain domain = domainMap.get(entry.getKey());
+            if (domain == null) {
+                domain = Domain.builder()
+                        .domainName(entry.getKey())
+                        .nextAvailableAt(now)
+                        .crawlDelayMs(500)
+                        .createAt(now)
                         .updatedAt(now)
-                        .build()
-                )
-                .toList();
-        pendingCrawlRepo.saveAll(pendingCrawls);
+                        .build();
+            // untracked domain: skip (or create it)
+            }
 
-        Timestamp nextAvailableAt = Timestamp.from(
-                Instant.now().plusMillis(1000)
-        );
-        domains.stream()
-                .filter(domain -> existingDomainNames.contains(domain.getDomainName()))
-                .forEach(domain -> domain.setNextAvailableAt(nextAvailableAt));
+            int remaining = domain.getMax_pages() - domain.getPages_crawled();
+            if (remaining <= 0) continue; // limit reached, drop all
 
-        domainRepo.saveAll(
-                domains.stream()
-                        .filter(domain -> existingDomainNames.contains(domain.getDomainName()))
-                        .toList()
-        );
+            // 4. drop the extras
+            List<String> allowed = entry.getValue().stream()
+                    .limit(remaining)
+                    .toList();
+            if (allowed.isEmpty()) continue;
+
+            for (String u : allowed) {
+                urlBloomFilterService.add(u);
+                toSave.add(PendingCrawl.builder()
+                        .url(u)
+                        .domainId(domain.getId())
+                                .retryAfter(null)
+                                .attemptCount(0)
+                                .createdAt(now)
+                                .updatedAt(now)
+                        .build());
+            }
+
+            // 5. update the count (in memory)
+            domain.setPages_crawled(domain.getPages_crawled() + allowed.size());
+            domain.setUpdatedAt(now);
+            domain.setNextAvailableAt(Timestamp.from(Instant.now().plusMillis(5000)));
+            domainsToUpdate.add(domain);
+        }
+
+        // 6. batch writes
+        if (!toSave.isEmpty()) pendingCrawlRepo.saveAll(toSave);
+        if (!domainsToUpdate.isEmpty()) domainRepo.saveAll(domainsToUpdate);
+
+        // 7. mark the current crawl as done
+        pendingCrawlRepo.delete(crawl);
+        crawlerRepo.save(Crawled.builder()
+                .url(crawl.getUrl()).domainId(crawl.getDomainId()).createdAt(now).updatedAt(now).build());
+    }
+
+    private String extractHost(String url) {
+        try {
+            String host = URI.create(url).getHost();
+            return host == null ? null : host.toLowerCase();
+        } catch (IllegalArgumentException e) {
+            return null; // malformed URL
+        }
     }
 
     private static Document request(String url) {
