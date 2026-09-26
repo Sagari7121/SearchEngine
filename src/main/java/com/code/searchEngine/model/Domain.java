@@ -1,38 +1,56 @@
 package com.code.searchEngine.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.springframework.context.annotation.Scope;
-import org.springframework.stereotype.Component;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.sql.Timestamp;
 
-@Component
+@Entity
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Entity
-@Data
 @Builder
+@Table(name = "domain", indexes = {
+        @Index(columnList = "domainName", unique = true),
+        @Index(columnList = "nextAvailableAt")
+})
 public class Domain {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Long id;
 
-    @Column(unique = true)
+    @Column(unique = true, nullable = false)
     private String domainName;
+
     private Timestamp nextAvailableAt;
     private int crawlDelayMs;
 
     @Builder.Default
     @Column(nullable = false)
-    private int max_pages = 5_000;
+    private int maxPages = 5_000;
 
     @Builder.Default
     @Column(nullable = false)
-    private int pages_crawled = 0;
-    private Timestamp createAt;
+    private int pagesCrawled = 0;
+
+    @CreationTimestamp
+    private Timestamp createdAt;
+
+    @UpdateTimestamp
     private Timestamp updatedAt;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Domain other)) return false;
+        return id != null && id.equals(other.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

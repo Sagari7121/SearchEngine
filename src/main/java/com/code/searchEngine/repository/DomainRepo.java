@@ -7,7 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
-public interface DomainRepo extends JpaRepository<Domain, Integer> {
+public interface DomainRepo extends JpaRepository<Domain, Long> {
 
     @Query("SELECT d FROM Domain d WHERE d.domainName IN :domainNames")
     public List<Domain> getDataInDomainName(@Param("domainNames") List<String> domains);

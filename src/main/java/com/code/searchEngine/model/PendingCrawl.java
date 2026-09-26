@@ -1,31 +1,52 @@
 package com.code.searchEngine.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.springframework.stereotype.Component;
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.sql.Timestamp;
+import java.util.UUID;
 
-@Component
+@Entity
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Data
-@Entity
 @Builder
+@Table(name = "pending_crawl", indexes = {
+        @Index(columnList = "url", unique = true),
+        @Index(columnList = "domainId"),
+        @Index(columnList = "retryAfter")
+})
 public class PendingCrawl {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private UUID id;
+
+    @Column(unique = true, nullable = false)
     private String url;
-    private int domainId;
+
+    private Long domainId;
+
     private Timestamp retryAfter;
     private int attemptCount;
+    private String lastError;
+
+    @CreationTimestamp
     private Timestamp createdAt;
-    private  Timestamp updatedAt;
+
+    @UpdateTimestamp
+    private Timestamp updatedAt;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof PendingCrawl other)) return false;
+        return id != null && id.equals(other.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

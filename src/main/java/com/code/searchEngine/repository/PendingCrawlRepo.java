@@ -6,9 +6,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.UUID;
 
 @Repository
-public interface PendingCrawlRepo extends JpaRepository<PendingCrawl, Integer> {
+public interface PendingCrawlRepo extends JpaRepository<PendingCrawl, UUID> {
 
     @Query(value = """
     SELECT *
@@ -17,7 +18,7 @@ public interface PendingCrawlRepo extends JpaRepository<PendingCrawl, Integer> {
             p.*,
             ROW_NUMBER() OVER (
                 PARTITION BY p.domain_id
-                ORDER BY p.id
+                ORDER BY p.created_at
             ) AS rn
         FROM pending_crawl p
         JOIN domain d ON p.domain_id = d.id
