@@ -1,9 +1,6 @@
 package com.code.searchEngine.service;
 
-import com.code.searchEngine.model.Domain;
-import com.code.searchEngine.model.PageLink;
-import com.code.searchEngine.model.PageMetadata;
-import com.code.searchEngine.model.PendingCrawl;
+import com.code.searchEngine.model.*;
 import com.code.searchEngine.repository.DomainRepo;
 import com.code.searchEngine.repository.PageLinkRepo;
 import com.code.searchEngine.repository.PageMetadataRepo;
@@ -195,6 +192,30 @@ public class CrawlService {
             if (id != null) l.setTargetPageId(id);
         });
         pageLinkRepo.saveAll(links);
+    }
+
+    @Transactional
+    public void recrawlPage(PageMetadata existing) {
+        Document doc = request(existing.getUrl());
+        if (doc == null) return;
+
+        String text = doc.body().text();
+        String newHash = sha256(text);
+        Timestamp now = Timestamp.from(Instant.now());
+
+        if (newHash.equals(existing.getContentHash())) {
+            existing.setUpdatedAt(now);
+            pageMetadataRepo.save(existing);
+            return;
+        }
+
+        existing.setTitle(doc.title());
+        existing.setText(text);
+        existing.setDescription(doc.select("meta[name=description]").attr("content"));
+        existing.setContentHash(newHash);
+        existing.setPageLastUpdatedAt(now);
+        existing.setIndexStatus(IndexStatus.PENDING);
+        pageMetadataRepo.save(existing);
     }
 
     private String extractHost(String url) {

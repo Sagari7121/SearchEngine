@@ -46,6 +46,11 @@ public class PageMetadata {
 
     private Timestamp pageLastUpdatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    @Column(nullable = false)
+    private IndexStatus indexStatus = IndexStatus.PENDING;
+
     @CreationTimestamp
     private Timestamp createdAt;
 
