@@ -6,9 +6,10 @@ import java.util.UUID;
 
 public record SegmentData(
         Map<String, List<SegmentPosting>> terms,
-        Map<UUID, Integer> docLengths
+        Map<UUID, Integer> titleLengths,
+        Map<UUID, Integer> textLengths
         ) {
     public boolean isEmpty() {
-        return docLengths.isEmpty();
+        return textLengths.isEmpty();
     }
 }

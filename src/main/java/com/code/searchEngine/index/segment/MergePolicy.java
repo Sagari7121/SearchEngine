@@ -24,20 +24,18 @@ public class MergePolicy {
     }
 
     @Scheduled(fixedRate = 60_000)
-    public void maybeMerge(){
+    public void maybeMerge() {
         List<SegmentReader> segments = segmentManager.getActiveSegments();
         if (segments.size() < MERGE_TRIGGER_COUNT) return;
 
-        try{
+        try {
             mergeAll(segments);
-        }catch (IOException e){
+        } catch (IOException e) {
             log.error("Merge failed, originals left untouched", e);
         }
     }
 
-    private void mergeAll(List<SegmentReader> inputs) throws IOException{
-        Set<Long> inputSegmentIds = inputs.stream().map(SegmentReader::getSegmentId).collect(Collectors.toSet());
-
+    private void mergeAll(List<SegmentReader> inputs) throws IOException {
         Set<UUID> allDocIdsInInputs = new HashSet<>();
         for (SegmentReader seg : inputs) allDocIdsInInputs.addAll(seg.allDocIds());
 
@@ -45,13 +43,15 @@ public class MergePolicy {
                 .stream().collect(Collectors.toMap(DocLocation::getPageId, DocLocation::getSegmentId));
 
         Map<String, List<SegmentPosting>> terms = new HashMap<>();
-        Map<UUID, Integer> docLengths = new HashMap<>();
+        Map<UUID, Integer> titleLengths = new HashMap<>();
+        Map<UUID, Integer> textLengths = new HashMap<>();
 
-        for(SegmentReader seg: inputs){
-            for(UUID docId: seg.allDocIds()){
+        for (SegmentReader seg : inputs) {
+            for (UUID docId : seg.allDocIds()) {
                 Long liveSegment = liveSegmentByDoc.get(docId);
                 if (liveSegment == null || !liveSegment.equals(seg.getSegmentId())) continue;
-                docLengths.put(docId, seg.docLength(docId));
+                titleLengths.put(docId, seg.titleLength(docId));
+                textLengths.put(docId, seg.textLength(docId));
             }
             for (String term : seg.allTerms()) {
                 for (SegmentPosting p : seg.getPostings(term)) {
@@ -62,14 +62,14 @@ public class MergePolicy {
             }
         }
 
-        SegmentReader merged = segmentManager.replaceWithMerged(inputs, new SegmentData(terms, docLengths));
-        List<DocLocation> updated = docLengths.keySet().stream()
+        SegmentReader merged = segmentManager.replaceWithMerged(inputs, new SegmentData(terms, titleLengths, textLengths));
+
+        List<DocLocation> updated = textLengths.keySet().stream()
                 .map(id -> DocLocation.builder().pageId(id).segmentId(merged.getSegmentId()).build())
                 .toList();
         docLocationRepo.saveAll(updated);
 
         log.info("Merged {} input segments -> segment_{}, kept {} live docs, dropped {} stale/deleted",
-                inputs.size(), merged.getSegmentId(), docLengths.size(), allDocIdsInInputs.size() - docLengths.size());
+                inputs.size(), merged.getSegmentId(), textLengths.size(), allDocIdsInInputs.size() - textLengths.size());
     }
-
 }

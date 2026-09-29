@@ -23,8 +23,8 @@ public final class SegmentWriter {
 
         try{
             writeTerms(tmpDir, data.terms());
-            writeDocLengths(tmpDir, data.docLengths());
-            writeMeta(tmpDir, data.docLengths().size());
+            writeDocLengths(tmpDir, data.titleLengths(), data.textLengths());
+            writeMeta(tmpDir, data.textLengths().size());
             Files.move(tmpDir, finalDir, StandardCopyOption.ATOMIC_MOVE);
         }catch (IOException | RuntimeException e){
             SegmentFiles.deleteRecursively(tmpDir);
@@ -37,16 +37,18 @@ public final class SegmentWriter {
         try(BufferedWriter w = Files.newBufferedWriter(dir.resolve(SegmentFiles.TERMS_FILES))) {
             for(Map.Entry<String, List<SegmentPosting>> entry: new TreeMap<>(terms).entrySet()){
                 for(SegmentPosting p: entry.getValue()){
-                    String positions = Arrays.stream(p.positions())
+                    String positions = Arrays.stream(p.textPositions())
                             .mapToObj(String::valueOf)
                             .collect(Collectors.joining(","));
 
                     w.write(entry.getKey());
-                    w.write("|");
+                    w.write('|');
                     w.write(p.docId().toString());
-                    w.write("|");
-                    w.write(Integer.toString(p.termFrequency()));
-                    w.write("|");
+                    w.write('|');
+                    w.write(Integer.toString(p.titleTf()));
+                    w.write('|');
+                    w.write(Integer.toString(p.textTf()));
+                    w.write('|');
                     w.write(positions);
                     w.newLine();
                 }
@@ -55,12 +57,14 @@ public final class SegmentWriter {
 
     }
 
-    private static void writeDocLengths(Path dir, Map<UUID, Integer> docLengths) throws IOException {
+    private static void writeDocLengths(Path dir, Map<UUID, Integer> titleLengths, Map<UUID, Integer> textLengths) throws IOException {
         try(BufferedWriter w = Files.newBufferedWriter(dir.resolve(SegmentFiles.DOC_LENGTHS_FILE))) {
-            for(Map.Entry<UUID, Integer> e: docLengths.entrySet()){
-                w.write(e.getKey().toString());
+            for(UUID docId: textLengths.keySet()){
+                w.write(docId.toString());
+                w.write("|");
+                w.write(Integer.toString(titleLengths.getOrDefault(docId, 0)));
                 w.write('|');
-                w.write(Integer.toString(e.getValue()));
+                w.write(Integer.toString(textLengths.get(docId)));
                 w.newLine();
             }
         }
@@ -68,8 +72,8 @@ public final class SegmentWriter {
     }
 
     private static void writeMeta(Path dir, int docCount) throws IOException {
-        try (BufferedWriter w = Files.newBufferedWriter(dir.resolve(SegmentFiles.META_FILE))){
-            w.write("formatVersion="+ SegmentFiles.FORMAT_VERSION);
+        try (BufferedWriter w = Files.newBufferedWriter(dir.resolve(SegmentFiles.META_FILE))) {
+            w.write("formatVersion=" + SegmentFiles.FORMAT_VERSION);
             w.newLine();
             w.write("docCount=" + docCount);
             w.newLine();

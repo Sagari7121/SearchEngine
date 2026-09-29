@@ -12,9 +12,10 @@ public class SegmentReader {
     private final long segmentId;
 
     private Map<String, List<SegmentPosting>> termIndex = Map.of();
-    private Map<UUID, Integer> docLengths = Map.of();
-    private double avgDocLength = 0.0;
-    private long totalTokens = 0;
+    private Map<UUID, Integer> titleLengths = Map.of();
+    private Map<UUID, Integer> textLengths = Map.of();
+    private double avgTitleLength = 0.0;
+    private double avgTextLength = 0.0;
 
 
     public SegmentReader(Path segmentDir){
@@ -23,126 +24,98 @@ public class SegmentReader {
                 .orElseThrow(() -> new IllegalArgumentException("Not a segment directory: " + segmentDir));
     }
 
-    public void load() throws IOException{
+    public void load() throws IOException {
         int expectedDocCount = readMeta();
-        this.docLengths = readDocLengths();
-        this.termIndex = readTerms();
-        this.totalTokens = docLengths.values().stream().mapToLong(Integer::longValue).sum();
+        readDocLengths();
+        readTerms();
 
-        if(docLengths.size() != expectedDocCount){
+        if (textLengths.size() != expectedDocCount) {
             throw new IOException("Corrupt segment " + segmentDir + ": meta says " + expectedDocCount
-                    + " docs but doclengths has " + docLengths.size());
+                    + " docs but doclengths has " + textLengths.size());
         }
-        this.avgDocLength = docLengths.values().stream().mapToInt(Integer::intValue).average().orElse(0.0);
+        avgTitleLength = titleLengths.values().stream().mapToInt(Integer::intValue).average().orElse(0.0);
+        avgTextLength = textLengths.values().stream().mapToInt(Integer::intValue).average().orElse(0.0);
     }
 
-    private int readMeta() throws IOException{
-        int version = -1;
-        int docCount = -1;
-
-        try(BufferedReader r = Files.newBufferedReader(segmentDir.resolve(SegmentFiles.META_FILE))){
+    private int readMeta() throws IOException {
+        int version = -1, docCount = -1;
+        try (BufferedReader r = Files.newBufferedReader(segmentDir.resolve(SegmentFiles.META_FILE))) {
             String line;
-            while((line = r.readLine()) != null){
+            while ((line = r.readLine()) != null) {
                 String[] kv = line.split("=", 2);
-                if(kv.length != 2) continue;
-                switch (kv[0]){
+                if (kv.length != 2) continue;
+                switch (kv[0]) {
                     case "formatVersion" -> version = Integer.parseInt(kv[1].trim());
                     case "docCount" -> docCount = Integer.parseInt(kv[1].trim());
-                    default -> {
-                    }
+                    default -> {}
                 }
             }
-
-            if(version != SegmentFiles.FORMAT_VERSION){
-                throw new IOException("Unsupported segment format version " + version + " in " + segmentDir);
-            }
-            if(docCount < 0){
-                throw new IOException("Missing docCount in " + segmentDir);
-            }
-            return docCount;
         }
+        if (version != SegmentFiles.FORMAT_VERSION) {
+            throw new IOException("Unsupported segment format version " + version + " in " + segmentDir
+                    + " (expected " + SegmentFiles.FORMAT_VERSION + " — old-format segments must be rebuilt)");
+        }
+        if (docCount < 0) throw new IOException("Missing docCount in " + segmentDir);
+        return docCount;
     }
 
-    private Map<UUID, Integer> readDocLengths() throws IOException{
-        Map<UUID, Integer> result = new HashMap<>();
-        try (BufferedReader r = Files.newBufferedReader(segmentDir.resolve(SegmentFiles.DOC_LENGTHS_FILE))){
+    private void readDocLengths() throws IOException{
+        Map<UUID, Integer> titles = new HashMap<>();
+        Map<UUID, Integer> texts = new HashMap<>();
+
+        try (BufferedReader r = Files.newBufferedReader(segmentDir.resolve(SegmentFiles.DOC_LENGTHS_FILE))) {
             String line;
             int lineNo = 0;
             while((line = r.readLine())!= null){
                 lineNo++;
-                if(line.isEmpty()) continue;
-                String[] parts = line.split("\\|", 2);
-                if(parts.length != 2){
+                if (line.isEmpty()) continue;
+                String[] parts = line.split("\\|", 3);
+                if (parts.length != 3) {
                     throw new IOException("Corrupt " + SegmentFiles.DOC_LENGTHS_FILE + " line " + lineNo + " in " + segmentDir);
                 }
-                result.put(UUID.fromString(parts[0]), Integer.parseInt(parts[1].trim()));
+                UUID docId = UUID.fromString(parts[0]);
+                titles.put(docId, Integer.parseInt(parts[1]));
+                texts.put(docId, Integer.parseInt(parts[2]));
             }
         }
-        return result;
+        this.titleLengths = titles;
+        this.textLengths = texts;
     }
 
-    private Map<String, List<SegmentPosting>> readTerms() throws IOException{
+    private void readTerms() throws IOException {
         Map<String, List<SegmentPosting>> result = new HashMap<>();
-
-        try(BufferedReader r = Files.newBufferedReader(segmentDir.resolve(SegmentFiles.TERMS_FILES))){
+        try (BufferedReader r = Files.newBufferedReader(segmentDir.resolve(SegmentFiles.TERMS_FILES))) {
             String line;
-            int lineNo=0;
-            while((line =r.readLine()) != null){
+            int lineNo = 0;
+            while ((line = r.readLine()) != null) {
                 lineNo++;
-                if(line.isEmpty()) continue;
-
-                String[] parts = line.split("\\|", 4);
-                if(parts.length != 4){
+                if (line.isEmpty()) continue;
+                String[] parts = line.split("\\|", 5);
+                if (parts.length != 5) {
                     throw new IOException("Corrupt " + SegmentFiles.TERMS_FILES + " line " + lineNo + " in " + segmentDir);
                 }
-                int[] positions = parts[3].isEmpty()
+                int[] positions = parts[4].isEmpty()
                         ? new int[0]
-                        : Arrays.stream(parts[3].split(",")).mapToInt(Integer::parseInt).toArray();
+                        : Arrays.stream(parts[4].split(",")).mapToInt(Integer::parseInt).toArray();
 
                 result.computeIfAbsent(parts[0], t -> new ArrayList<>())
-                        .add(new SegmentPosting(UUID.fromString(parts[1]), Integer.parseInt(parts[2]), positions));
+                        .add(new SegmentPosting(UUID.fromString(parts[1]),
+                                Integer.parseInt(parts[2]), Integer.parseInt(parts[3]), positions));
             }
         }
-        return result;
+        this.termIndex = result;
     }
 
-    public List<SegmentPosting> getPostings(String term) {
-        return termIndex.getOrDefault(term, List.of());
-    }
-
-    public int docFrequency(String term){
-        return getPostings(term).size();
-    }
-
-    public int docCount(){
-        return docLengths.size();
-    }
-
-    public double averageDocLength() {
-        return avgDocLength;
-    }
-
-    public int docLength(UUID docId) {
-        return docLengths.getOrDefault(docId, 0);
-    }
-
-    public Set<String> allTerms() {
-        return Collections.unmodifiableSet(termIndex.keySet());
-    }
-
-    public Set<UUID> allDocIds() {
-        return Collections.unmodifiableSet(docLengths.keySet());
-    }
-
-    public long totalTokens() {
-        return totalTokens;
-    }
-
-    public Path getSegmentDir() {
-        return segmentDir;
-    }
-
-    public long getSegmentId() {
-        return segmentId;
-    }
+    public List<SegmentPosting> getPostings(String term) { return termIndex.getOrDefault(term, List.of()); }
+    public int docFrequency(String term) { return getPostings(term).size(); }
+    public int docCount() { return textLengths.size(); }
+    public double averageTitleLength() { return avgTitleLength; }
+    public double averageTextLength() { return avgTextLength; }
+    public int titleLength(UUID docId) { return titleLengths.getOrDefault(docId, 0); }
+    public int textLength(UUID docId) { return textLengths.getOrDefault(docId, 0); }
+    public long totalTextTokens() { return textLengths.values().stream().mapToLong(Integer::longValue).sum(); }
+    public Set<String> allTerms() { return Collections.unmodifiableSet(termIndex.keySet()); }
+    public Set<UUID> allDocIds() { return Collections.unmodifiableSet(textLengths.keySet()); }
+    public Path getSegmentDir() { return segmentDir; }
+    public long getSegmentId() { return segmentId; }
 }
