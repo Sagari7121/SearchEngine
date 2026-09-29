@@ -5,7 +5,9 @@ import com.code.searchEngine.dto.SearchResult;
 import com.code.searchEngine.index.segment.SegmentManager;
 import com.code.searchEngine.index.segment.SegmentPosting;
 import com.code.searchEngine.index.segment.SegmentReader;
+import com.code.searchEngine.model.DocLocation;
 import com.code.searchEngine.model.PageMetadata;
+import com.code.searchEngine.repository.DocLocationRepo;
 import com.code.searchEngine.repository.PageMetadataRepo;
 import com.code.searchEngine.utils.Analyzer;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ public class SegmentSearchService {
     private final Analyzer analyzer;
     private final SegmentManager segmentManager;
     private final PageMetadataRepo pageMetadataRepo;
+    private final DocLocationRepo docLocationRepo;
 
     private record Stats(long totalDocs, double avgDocLength, Map<String, Integer> docFreq) {}
 
@@ -136,6 +139,19 @@ public class SegmentSearchService {
     private Map<UUID, Double> score(Set<String> terms, List<SegmentReader> segments, Stats stats, Set<UUID> candidates){
         Map<UUID, Double> scores = new HashMap<>();
 
+        Set<UUID> candidateDocIds = new HashSet<>();
+
+        for(String term: terms){
+            for(SegmentReader seg: segments){
+                for(SegmentPosting p: seg.getPostings(term)){
+                    candidateDocIds.add(p.docId());
+                }
+            }
+        }
+
+        Map<UUID, Long> liveSegmentByDoc = docLocationRepo.findByPageIdIn(candidateDocIds).stream()
+                .collect(Collectors.toMap(DocLocation::getPageId, DocLocation::getSegmentId))
+
         for(String term: terms){
             int df = stats.docFreq().getOrDefault(term, 0);
             if(df==0) continue;
@@ -145,6 +161,9 @@ public class SegmentSearchService {
             for(SegmentReader seg: segments){
                 for(SegmentPosting p: seg.getPostings(term)){
                     if (candidates != null && !candidates.contains(p.docId())) continue;
+
+                    Long liveSegment = liveSegmentByDoc.get(p.docId());
+                    if (liveSegment == null || liveSegment != seg.getSegmentId()) continue;
 
                     int tf = p.termFrequency();
                     int docLength = seg.docLength(p.docId());
