@@ -23,6 +23,9 @@ public class Posting {
     private Long id;
 
     private String term;
-    private UUID pageId; // FK -> PageMetadata.id / DocumentIndex.pageId
+    private UUID pageId;
     private int termFrequency;
+
+    @Column(columnDefinition = "TEXT")
+    private String positions;
 }

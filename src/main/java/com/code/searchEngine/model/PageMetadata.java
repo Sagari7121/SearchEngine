@@ -1,5 +1,6 @@
 package com.code.searchEngine.model;
 
+import com.code.searchEngine.dto.IndexStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;

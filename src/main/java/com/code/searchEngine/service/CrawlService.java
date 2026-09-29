@@ -1,5 +1,6 @@
 package com.code.searchEngine.service;
 
+import com.code.searchEngine.dto.IndexStatus;
 import com.code.searchEngine.model.*;
 import com.code.searchEngine.repository.DomainRepo;
 import com.code.searchEngine.repository.PageLinkRepo;

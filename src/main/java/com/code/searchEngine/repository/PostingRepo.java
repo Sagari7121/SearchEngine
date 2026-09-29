@@ -28,4 +28,7 @@ public interface PostingRepo extends JpaRepository<Posting, Long> {
     LIMIT :cap
     """, nativeQuery = true)
     List<Posting> findTopByTerm(@Param("term") String term, @Param("cap") int cap);
+
+    
+    List<Posting> findByTermInAndPageIdIn(Collection<String> terms, Collection<UUID> pageIds);
 }

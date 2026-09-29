@@ -9,10 +9,9 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.lang.reflect.Array;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,25 +25,24 @@ public class IndexingService {
         List<String> tokens = analyzer.tokenize(text);
         postingRepo.deleteByPageId(pageId);
 
-        Map<String, Integer> termCount = new HashMap<>();
-        for(String token: tokens){
-            termCount.merge(token, 1, Integer::sum);
+        Map<String, List<Integer>> termPositions = new HashMap<>();
+        for (int position = 0; position < tokens.size(); position++) {
+            termPositions.computeIfAbsent(tokens.get(position), t -> new ArrayList<>()).add(position);
         }
 
-        documentIndexRepo.save(DocumentIndex.builder()
-                .id(UUID.randomUUID())
-                .pageId(pageId)
-                .docLength(tokens.size())
-                .build()
-        );
-
-        List<Posting> postings = termCount.entrySet().stream()
+        List<Posting> postings = termPositions.entrySet().stream()
                 .map(e -> Posting.builder()
                         .term(e.getKey())
                         .pageId(pageId)
-                        .termFrequency(e.getValue())
-                        .build()
-                ).toList();
+                        .termFrequency(e.getValue().size())
+                        .positions(e.getValue().stream().map(String::valueOf).collect(Collectors.joining(",")))
+                        .build())
+                .toList();
         postingRepo.saveAll(postings);
+
+        DocumentIndex docIndex = documentIndexRepo.findByPageId(pageId)
+                .orElseGet(() -> DocumentIndex.builder().id(UUID.randomUUID()).pageId(pageId).build());
+        docIndex.setDocLength(tokens.size());
+        documentIndexRepo.save(docIndex);
     }
 }
