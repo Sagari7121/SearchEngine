@@ -1,15 +1,35 @@
-#
-# Build stage
-#
-FROM maven:3.8.3-openjdk-17 AS build
-COPY . .
-RUN mvn clean install
+# =========================
+# Stage 1: Build
+# =========================
+FROM maven:3.9-eclipse-temurin-25 AS builder
 
-#
-# Package stage
-#
-FROM eclipse-temurin:17-jdk
-COPY --from=build /target/your-build.jar demo.jar
-# ENV PORT=8080
+WORKDIR /app
+
+# Copy pom first for better Docker layer caching
+COPY pom.xml .
+
+# Download dependencies
+RUN mvn dependency:go-offline -B
+
+# Copy source code
+COPY src ./src
+
+# Build the application
+RUN mvn clean package -DskipTests
+
+
+# =========================
+# Stage 2: Run
+# =========================
+FROM eclipse-temurin:25-jre
+
+WORKDIR /app
+
+# Copy the generated JAR from the builder
+COPY --from=builder /app/target/*.jar app.jar
+
+# Spring Boot default port
 EXPOSE 8080
-ENTRYPOINT ["java","-jar","demo.jar"]
+
+# Start application
+ENTRYPOINT ["java", "-jar", "app.jar"]
