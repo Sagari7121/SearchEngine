@@ -10,11 +10,8 @@ public class UrlBloomFilterService {
 
     private final RBloomFilter<String> bloomFilter;
 
-
-
     public UrlBloomFilterService(RedissonClient redissonClient){
         this.bloomFilter = redissonClient.getBloomFilter(FILTER_NAME);
-
 
         boolean initialized =   bloomFilter.tryInit(100_000_000L, 0.005);
 
@@ -29,5 +26,9 @@ public class UrlBloomFilterService {
 
     public void add(String url){
         bloomFilter.add(url);
+    }
+
+    public void delete() {
+        this.bloomFilter.delete();
     }
 }
