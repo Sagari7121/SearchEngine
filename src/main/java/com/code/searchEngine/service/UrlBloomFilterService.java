@@ -6,7 +6,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class UrlBloomFilterService {
-    private static final String FILTER_NAME = "crawled_urls";
+    private static final String FILTER_NAME = "crawled_urls_v2";
 
     private final RBloomFilter<String> bloomFilter;
 
