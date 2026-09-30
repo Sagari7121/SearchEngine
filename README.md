@@ -2,8 +2,6 @@
 
 A web crawler and search engine built in Java/Spring Boot — **no Lucene, Elasticsearch, or any off-the-shelf search library**. The inverted index, BM25F ranking, phrase search, segment storage, and PageRank are all implemented from first principles.
 
-> Replace this section with your own 2-3 line pitch — e.g. what you crawl, roughly how large the index gets, and a link to a live demo if you have one.
-
 ---
 
 ## Table of Contents
@@ -148,14 +146,11 @@ Returns ranked results with URL, title, snippet, and score. Wrap `q` in double q
 }
 ```
 
-> Add any other endpoints you've since exposed (delete, health check, etc.) here.
-
 ## Running locally
 
 ```bash
 # prerequisites: JDK 21+, PostgreSQL, Redis (for the Bloom filter)
 
-git clone <your-repo-url>
 cd search-engine
 
 # configure application.properties / application-dev.properties:
