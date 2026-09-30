@@ -6,29 +6,48 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class UrlBloomFilterService {
+
     private static final String FILTER_NAME = "crawled_urls_v2";
+
+    private static final long EXPECTED_INSERTIONS = 100_000_000L;
+    private static final double FALSE_POSITIVE_RATE = 0.005;
 
     private final RBloomFilter<String> bloomFilter;
 
-    public UrlBloomFilterService(RedissonClient redissonClient){
+    public UrlBloomFilterService(RedissonClient redissonClient) {
+
         this.bloomFilter = redissonClient.getBloomFilter(FILTER_NAME);
 
-        boolean initialized =   bloomFilter.tryInit(100_000_000L, 0.005);
+        if (!bloomFilter.isExists()) {
 
-        System.out.println("Bloom filter initialized: " + initialized);
+            boolean initialized = bloomFilter.tryInit(
+                    EXPECTED_INSERTIONS,
+                    FALSE_POSITIVE_RATE
+            );
+
+            if (!initialized) {
+                throw new IllegalStateException(
+                        "Failed to initialize Bloom filter"
+                );
+            }
+
+            System.out.println("Bloom filter initialized");
+        } else {
+            System.out.println("Bloom filter already exists");
+        }
+
         System.out.println("Bloom filter exists: " + bloomFilter.isExists());
-
     }
 
-    public boolean mightContain(String url){
+    public boolean mightContain(String url) {
         return bloomFilter.contains(url);
     }
 
-    public void add(String url){
+    public void add(String url) {
         bloomFilter.add(url);
     }
 
     public void delete() {
-        this.bloomFilter.delete();
+        bloomFilter.delete();
     }
 }
