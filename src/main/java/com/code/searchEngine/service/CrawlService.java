@@ -42,6 +42,7 @@ public class CrawlService {
 
     @Transactional
     public void crawl(PendingCrawl crawl){
+        urlBloomFilterService.add(crawl.getUrl());
         String url = crawl.getUrl();
         String host = extractHost(url);
 
