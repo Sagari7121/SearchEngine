@@ -7,8 +7,10 @@ import com.code.searchEngine.index.segment.SegmentPosting;
 import com.code.searchEngine.index.segment.SegmentReader;
 import com.code.searchEngine.model.DocLocation;
 import com.code.searchEngine.model.PageMetadata;
+import com.code.searchEngine.model.PageRank;
 import com.code.searchEngine.repository.DocLocationRepo;
 import com.code.searchEngine.repository.PageMetadataRepo;
+import com.code.searchEngine.repository.PageRankRepo;
 import com.code.searchEngine.utils.Analyzer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,11 +29,13 @@ public class SegmentSearchService {
     private static final double TITLE_B = 0.3;
     private static final double TEXT_WEIGHT = 1.0;
     private static final double TEXT_B = 0.75;
+    private static final double LINK_BOOST_WEIGHT = 0.5;
 
     private final Analyzer analyzer;
     private final SegmentManager segmentManager;
     private final PageMetadataRepo pageMetadataRepo;
     private final DocLocationRepo docLocationRepo;
+    private final PageRankRepo pageRankRepo;
 
     private record Stats(long totalDocs, double avgTitleLength, double avgTextLength, Map<String, Integer> docFreq) {}
 
@@ -54,6 +58,7 @@ public class SegmentSearchService {
         if (stats.totalDocs() == 0) return List.of();
 
         Map<UUID, Double> scores = score(terms, segments, stats, null);
+        scores = applyLinkBoost(scores);
         return topResults(scores, terms, limit);
     }
 
@@ -71,6 +76,7 @@ public class SegmentSearchService {
         if (stats.totalDocs() == 0) return List.of();
 
         Map<UUID, Double> scores = score(terms, segments, stats, matches);
+        scores = applyLinkBoost(scores);
         return topResults(scores, terms, limit);
     }
 
@@ -206,5 +212,37 @@ public class SegmentSearchService {
                 })
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    private Map<UUID, Double> applyLinkBoost(Map<UUID, Double> bm25Scores) {
+        if (bm25Scores.isEmpty()) return bm25Scores;
+
+        Double min = pageRankRepo.minScore();
+        Double max = pageRankRepo.maxScore();
+
+        if (min == null || max == null || Math.abs(max - min) < 1e-12) {
+            return bm25Scores;
+        }
+
+        double logMin = Math.log(min);
+        double logMax = Math.log(max);
+
+        Map<UUID, Double> ranks = pageRankRepo.findByPageIdIn(bm25Scores.keySet())
+                .stream()
+                .collect(Collectors.toMap(PageRank::getPageId, PageRank::getScore));
+
+        Map<UUID, Double> boosted = new HashMap<>();
+
+        for (Map.Entry<UUID, Double> entry : bm25Scores.entrySet()) {
+            UUID pageId = entry.getKey();
+            Double score = entry.getValue();
+
+            double rawRank = ranks.getOrDefault(pageId, min);
+            double normalizedRank = (Math.log(rawRank) - logMin) / (logMax - logMin);
+
+            boosted.put(pageId, score * (1 + LINK_BOOST_WEIGHT * normalizedRank));
+        }
+
+        return boosted;
     }
 }

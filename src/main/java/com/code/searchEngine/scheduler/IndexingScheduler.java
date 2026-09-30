@@ -3,7 +3,6 @@ package com.code.searchEngine.scheduler;
 import com.code.searchEngine.dto.IndexStatus;
 import com.code.searchEngine.model.PageMetadata;
 import com.code.searchEngine.repository.PageMetadataRepo;
-import com.code.searchEngine.service.IndexingService;
 import com.code.searchEngine.service.SegmentIndexer;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
