@@ -12,7 +12,15 @@ import java.util.UUID;
 public interface PendingCrawlRepo extends JpaRepository<PendingCrawl, UUID> {
 
     @Query(value = """
-    SELECT *
+    SELECT
+        x.id,
+        x.url,
+        x.domain_id,
+        x.retry_after,
+        x.attempt_count,
+        x.last_error,
+        x.created_at,
+        x.updated_at
     FROM (
         SELECT
             p.*,
