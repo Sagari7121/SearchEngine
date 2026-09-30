@@ -6,8 +6,11 @@ import com.code.searchEngine.repository.DomainRepo;
 import com.code.searchEngine.repository.PageLinkRepo;
 import com.code.searchEngine.repository.PageMetadataRepo;
 import com.code.searchEngine.repository.PendingCrawlRepo;
+import com.code.searchEngine.robots.RobotRules;
+import com.code.searchEngine.robots.RobotsTxtParser;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -23,6 +26,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class CrawlService {
 
@@ -33,10 +37,22 @@ public class CrawlService {
     private final LocalSSRFChecker localSSRFChecker;
     private final UrlNormalizer urlNormalizer;
     private final PageLinkRepo pageLinkRepo;
+    private final RobotsTxtService robotsTxtService;
 
 
     @Transactional
     public void crawl(PendingCrawl crawl){
+        String url = crawl.getUrl();
+        String host = extractHost(url);
+
+        if(host!= null){
+            RobotRules rules = robotsTxtService.getRules(host);
+            String path = URI.create(url).getPath();
+            if(!rules.isAllowed(path == null || path.isEmpty() ? "/" : path)){
+                log.info("Skipping {} — disallowed by robots.txt", url);
+                return;
+            }
+        }
         List<PageLink> newUrls = getPageData(crawl);
 
         if (newUrls == null) {
@@ -48,6 +64,7 @@ public class CrawlService {
 
     public List<PageLink> getPageData(PendingCrawl crawl) {
         String url = crawl.getUrl();
+
         try{
             Document doc = request(url);
 
@@ -133,6 +150,13 @@ public class CrawlService {
         // 2. group by host (skip malformed URLs)
         Map<String, List<String>> byHost = fresh.stream()
                 .filter(u -> extractHost(u) != null)
+                .filter(u -> {
+                    String host = extractHost(u);
+                    if (host == null) return false;
+                    String path = URI.create(u).getPath();
+                    return robotsTxtService.getRules(host).isAllowed(path == null || path.isEmpty() ? "/" : path);
+
+                })
                 .collect(Collectors.groupingBy(this::extractHost));
 
         if (byHost.isEmpty()) {
@@ -152,10 +176,14 @@ public class CrawlService {
         for (Map.Entry<String, List<String>> entry : byHost.entrySet()) {
             Domain domain = domainMap.get(entry.getKey());
             if (domain == null) {
+                RobotRules rules = robotsTxtService.getRules(entry.getKey());
+                int delayMs = rules.getCrawlDelaySeconds() != null
+                        ? Math.max(500, rules.getCrawlDelaySeconds() * 1000)
+                        : 500;
                 domain = domainRepo.save(Domain.builder()
                         .domainName(entry.getKey())
                         .nextAvailableAt(now)
-                        .crawlDelayMs(500)
+                        .crawlDelayMs(delayMs)
                         .build());
             }
 
@@ -243,6 +271,7 @@ public class CrawlService {
     private static Document request(String url) {
         try {
             Connection con = Jsoup.connect(url)
+                    .userAgent(RobotsTxtService.USER_AGENT)
                     .timeout(10_000)
                     .maxBodySize(2 * 1024 * 1024)
                     .ignoreContentType(true);
