@@ -160,30 +160,3 @@ cd search-engine
 ./mvnw spring-boot:run
 ```
 
-## Configuration
-
-| Property | Purpose |
-|---|---|
-| `search.index.data-dir` | Filesystem path where segments are stored |
-| Crawler batch size / interval | See `NewUrlCrawler`, `IndexingScheduler` `@Scheduled` annotations |
-| `MERGE_TRIGGER_COUNT` | Segment count that triggers a background merge |
-| `MAX_CANDIDATES_PER_TERM` | Caps postings scored per term, to bound query latency on very common terms |
-| `LINK_BOOST_WEIGHT` | How strongly PageRank influences final ranking (0 disables it) |
-
-## Design decisions worth knowing about
-
-A few choices made deliberately, worth understanding rather than assuming were oversights:
-
-- **Relational tables were used before segments existed**, and briefly coexisted with them during the transition. The segment engine is now the source of truth for search; if you still see `posting`/`document_index` tables in the schema, they're legacy and safe to drop once confirmed unused.
-- **Merges currently fold all eligible segments into one**, rather than tiered merging by size (as Lucene's `TieredMergePolicy` does). This is simpler and correct, but means merge cost grows with total corpus size rather than staying proportional to what's new — a known scaling limitation, not a bug.
-- **No manifest file for segment-set crash recovery.** Tombstones (`doc_location`) already prevent a crash mid-merge from causing incorrect results (stale segments get filtered, not double-counted), so this is a lower-priority efficiency improvement rather than a correctness gap.
-- **Dangling PageRank mass isn't redistributed.** Pages with no resolved outbound links don't pass their score forward each iteration, which is a simplification of the textbook algorithm. Unlikely to meaningfully skew results at this corpus size.
-
-## Known limitations / roadmap
-
-- [ ] Tiered (size-aware) segment merging
-- [ ] Manifest-based crash recovery for segment sets
-- [ ] Stemming / better normalization in the tokenizer
-- [ ] Snippet generation quality (currently first-match-window, no relevance-based window selection)
-- [ ] Rate limiting on public API endpoints
-- [ ] PageRank dangling-mass redistribution
