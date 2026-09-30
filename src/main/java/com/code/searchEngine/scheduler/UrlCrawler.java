@@ -26,6 +26,7 @@ public class UrlCrawler {
     @Scheduled(cron = "0 */2 * * * *")
     public void fetchUrlsAndGetData() {
         List<PendingCrawl> crawlList = pendingCrawlRepo.getPendingUrls();
+        System.out.println("crawlList " +  crawlList);
 
         for (PendingCrawl crawl : crawlList) {
             crawlService.crawl(crawl);
