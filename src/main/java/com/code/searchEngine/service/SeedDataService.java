@@ -265,7 +265,6 @@ public class SeedDataService {
                         .build();
 
                 pendingCrawls.add(pendingCrawl);
-                urlBloomFilterService.add(url);
             }
         }
 
