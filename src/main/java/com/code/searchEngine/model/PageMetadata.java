@@ -26,11 +26,12 @@ public class PageMetadata {
     @Id
     private UUID id; // assigned in code at discovery time — see PendingCrawl
 
-    @Column(unique = true, nullable = false)
+    @Column(unique = true, nullable = false, columnDefinition = "TEXT" )
     private String url;
 
     private Long domainId; // FK -> Domain.id
 
+    @Column(columnDefinition = "TEXT")
     private String title;
 
     @Column(columnDefinition = "TEXT")
@@ -39,8 +40,11 @@ public class PageMetadata {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(columnDefinition = "TEXT")
     private String canonicalUrl;
     private int httpStatus;
+
+    @Column(columnDefinition = "TEXT")
     private String language;
 
     private String contentHash;

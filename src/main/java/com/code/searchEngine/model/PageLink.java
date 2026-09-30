@@ -24,8 +24,13 @@ public class PageLink {
     private Long id;
 
     private UUID sourcePageId;
+
+    @Column(columnDefinition = "TEXT")
     private String targetUrl;
+
     private UUID targetPageId;
+
+    @Column(columnDefinition = "TEXT")
     private String anchorText;
 
     @CreationTimestamp

@@ -23,13 +23,15 @@ public class PendingCrawl {
     @Id
     private UUID id;
 
-    @Column(unique = true, nullable = false)
+    @Column(unique = true, nullable = false, columnDefinition = "TEXT")
     private String url;
 
     private Long domainId;
 
     private Timestamp retryAfter;
     private int attemptCount;
+
+    @Column(columnDefinition = "TEXT")
     private String lastError;
 
     @CreationTimestamp
