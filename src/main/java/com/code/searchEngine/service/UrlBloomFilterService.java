@@ -9,7 +9,7 @@ public class UrlBloomFilterService {
 
     private static final String FILTER_NAME = "crawled_urls_v2";
 
-    private static final long EXPECTED_INSERTIONS = 100_000_000L;
+    private static final long EXPECTED_INSERTIONS = 10_000_000L;
     private static final double FALSE_POSITIVE_RATE = 0.005;
 
     private final RBloomFilter<String> bloomFilter;
