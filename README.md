@@ -17,8 +17,6 @@ A web crawler and search engine built in Java/Spring Boot — **no Lucene, Elast
 - [Data model](#data-model)
 - [API](#api)
 - [Running locally](#running-locally)
-- [Configuration](#configuration)
-- [Design decisions worth knowing about](#design-decisions-worth-knowing-about)
 - [Known limitations / roadmap](#known-limitations--roadmap)
 
 ---
