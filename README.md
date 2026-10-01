@@ -160,3 +160,38 @@ cd search-engine
 ./mvnw spring-boot:run
 ```
 
+## Known limitations / roadmap
+
+This is a working prototype built to learn how search engines work internally. The items below are the gaps I know about, roughly in the order I would tackle them.
+
+### Storage engine
+
+- **Segments are loaded fully into memory.** Each segment's postings and document lengths are read into heap on startup, so index size is bounded by RAM. Next step: a sorted term dictionary with on-disk postings that are read on demand (memory-mapped files or block-level reads).
+- **Segment files are plain text.** Postings are stored as pipe-delimited lines, which is easy to debug but large and slow to parse. Next step: a binary format with delta-encoded document ids and variable-byte compression for positions.
+- **No explicit `fsync` before the atomic rename.** The temp-directory-then-rename flush prevents readers from seeing a partial segment, but durability across a power loss is not guaranteed until the files and the parent directory are synced.
+- **No skip pointers.** Multi-term and phrase queries walk full postings lists. Skip lists would let intersections jump ahead.
+- **Merge policy is a simple threshold.** A tiered policy (merge segments of similar size) would reduce write amplification as the index grows.
+
+### Text analysis
+
+- **The tokenizer is a single regex** (`[a-z0-9]+` after lowercasing). There is no stemming, stop-word handling, or synonym support, so "running" does not match "run".
+- **English/ASCII only.** Non-Latin scripts and accented characters are dropped. Next step: Unicode-aware tokenization and normalisation.
+
+### Ranking and query features
+
+- **BM25F parameters and the PageRank weight are hand-set**, not tuned against a relevance benchmark. Next step: evaluate with a labelled query set (nDCG / MRR) and tune from there.
+- **Query language is minimal**: free text and quoted phrases only. No boolean operators, field-scoped queries (`title:`), or typo tolerance.
+- **PageRank is recomputed from scratch nightly** over the whole link graph. An incremental update would scale better.
+
+### Crawler
+
+- **HTML only.** No JavaScript rendering, sitemap discovery, or handling of non-HTML content types.
+- **Near-duplicate detection is exact-hash only** (SHA-256). SimHash or MinHash would catch pages that differ only in boilerplate.
+- **Crawl prioritisation is first-due, first-served.** Prioritising by domain authority or freshness would use the crawl budget better.
+
+### Engineering
+
+- **Test coverage is minimal.** Priority: unit tests for the segment writer/reader round trip, merge with tombstones, phrase matching, and the robots.txt parser.
+- **Configuration and secrets** should come entirely from environment variables rather than `application.properties`.
+- **No metrics or benchmarks yet.** Planned: indexing throughput, query latency percentiles, and index size per 1,000 pages, measured on a fixed corpus.
+- **Single node.** The index lives on one machine's disk; sharding and replication are out of scope for now.
