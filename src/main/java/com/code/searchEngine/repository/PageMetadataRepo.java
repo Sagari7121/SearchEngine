@@ -2,6 +2,7 @@ package com.code.searchEngine.repository;
 
 import com.code.searchEngine.model.PageMetadata;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -32,4 +33,8 @@ public interface PageMetadataRepo extends JpaRepository<PageMetadata, UUID> {
     FOR UPDATE SKIP LOCKED
     """, nativeQuery = true)
     List<PageMetadata> findDueForRecrawl(@Param("cutoff") Timestamp cutoff, @Param("limit") int limit);
+
+    @Modifying
+    @Query("UPDATE PageMetadata p SET p.indexStatus = 'PENDING'")
+    void markAllPending();
 }

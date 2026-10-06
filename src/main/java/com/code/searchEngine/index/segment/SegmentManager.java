@@ -105,4 +105,12 @@ public class SegmentManager {
     public Path getIndexRoot() {
         return indexRoot;
     }
+
+    public synchronized void resetAll() throws IOException {
+        for (SegmentReader seg : activeSegments) {
+            SegmentFiles.deleteRecursively(seg.getSegmentDir());
+        }
+        activeSegments.clear();
+        segmentCounter.set(0);
+    }
 }
